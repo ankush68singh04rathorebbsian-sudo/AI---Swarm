@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI SWARM</title>
+  <style>
+    :root {
+      --bg: #080c14;
+      --surface: #101726;
+      --surface-2: #172036;
+      --border: #253252;
+      --text: #eef3ff;
+      --muted: #8e9ec4;
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.18);
+      --ok: #22c55e;
+      --err: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 16px;
+      letter-spacing: 0.6px;
+    }
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--ok);
+      box-shadow: 0 0 10px var(--ok);
+    }
+    .dot.offline { background: var(--err); box-shadow: 0 0 10px var(--err); }
+    .icon-btn {
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .icon-btn:hover { border-color: var(--accent); }
+    main {
+      flex: 1;
+      width: 100%;
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 18px 16px 140px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    /* Setup Card */
+    .setup-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-top: 12px;
+    }
+    .setup-card h2 { font-size: 18px; color: var(--accent); }
+    .setup-card p { font-size: 13px; color: var(--muted); line-height: 1.5; }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field label { font-size: 12px; font-weight: 600; color: var(--muted); }
+    input, select, textarea {
+      width: 100%;
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 11px 13px;
+      font: inherit;
+      font-size: 14px;
+      outline: none;
+    }
+    input:focus, textarea:focus { border-color: var(--accent); }
+    .primary-btn {
+      background: linear-gradient(135deg, #0284c7, #4f46e5);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 12px 18px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .primary-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    /* Chat Stream */
+    .empty-state {
+      text-align: center;
+      margin: auto;
+      padding: 40px 16px;
+      color: var(--muted);
+    }
+    .empty-state h1 { font-size: 22px; color: var(--text); margin-bottom: 8px; }
+    .empty-state p { font-size: 14px; max-width: 460px; margin: 0 auto; line-height: 1.5; }
+    .bubble {
+      border-radius: 14px;
+      padding: 16px 18px;
+      line-height: 1.6;
+      font-size: 14.5px;
+      word-wrap: break-word;
+    }
+    .bubble.user {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      align-self: flex-end;
+      max-width: 88%;
+    }
+    .bubble.assistant {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      width: 100%;
+    }
+    .bubble-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      font-size: 11.5px;
+      color: var(--accent);
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .copy-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .copy-btn:hover { color: var(--text); border-color: var(--accent); }
+    /* Markdown Output Styling */
+    .md h1, .md h2, .md h3 { margin: 14px 0 6px; color: #fff; }
+    .md h1 { font-size: 18px; }
+    .md h2 { font-size: 16px; }
+    .md h3 { font-size: 14.5px; color: var(--accent); }
+    .md p { margin-bottom: 10px; }
+    .md ul, .md ol { margin: 6px 0 12px 20px; }
+    .md li { margin-bottom: 5px; }
+    .md code {
+      background: #070b12;
+      padding: 2px 5px;
+      border-radius: 5px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 13px;
+      color: #7dd3fc;
+    }
+    .md pre {
+      background: #070b12;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      overflow-x: auto;
+      margin: 10px 0;
+    }
+    .md pre code { background: none; padding: 0; color: #e2e8f0; }
+    /* Silent Processing Pulse */
+    .loader {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--surface);
+      border: 1px solid var(--accent);
+      box-shadow: 0 0 20px var(--accent-glow);
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 13.5px;
+      color: var(--text);
+    }
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2.5px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    /* Bottom Composer */
+    .composer-wrap {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(to top, var(--bg) 75%, transparent);
+      padding: 12px 16px 18px;
+    }
+    .composer {
+      max-width: 820px;
+      margin: 0 auto;
+      display: flex;
+      gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 8px;
+      align-items: flex-end;
+    }
+    .composer textarea {
+      border: none;
+      background: transparent;
+      resize: none;
+      max-height: 140px;
+      min-height: 44px;
+      padding: 9px 10px;
+    }
+    .error-text { color: var(--err); font-size: 13px; margin-top: 4px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span id="statusDot" class="dot offline"></span>
+    <span>AI SWARM</span>
+  </div>
+  <div style="display:flex;gap:8px">
+    <button class="icon-btn" onclick="clearChat()">New Task</button>
+    <button class="icon-btn" onclick="toggleSetup(true)">API Keys</button>
+  </div>
+</header>
+
+<main id="mainContainer">
+  <!-- API Key Setup Screen -->
+  <section id="setupScreen" class="setup-card" style="display:none">
+    <h2>Connect Your AI Team</h2>
+    <p>
+      Enter your API keys below to grant AI SWARM access to ChatGPT and Gemini.
+      Your keys stay privately inside your own browser storage and are never sent to any third-party server.
+    </p>
+    <div class="field">
+      <label for="openaiKey">OpenAI API Key (ChatGPT)</label>
+      <input id="openaiKey" type="password" placeholder="sk-..." autocomplete="off" />
+    </div>
+    <div class="field">
+      <label for="geminiKey">Google Gemini API Key</label>
+      <input id="geminiKey" type="password" placeholder="AIza..." autocomplete="off" />
+    </div>
+    <div class="field">
+      <label for="qualityTier">Collaboration Power</label>
+      <select id="qualityTier">
+        <option value="pro">High Precision (GPT-4o + Gemini 2.5 Pro)</option>
+        <option value="fast">Fast & Economical (GPT-4o-mini + Gemini 2.5 Flash)</option>
+      </select>
+    </div>
+    <div id="setupError" class="error-text"></div>
+    <button class="primary-btn" onclick="saveKeys()">Save & Activate AI Swarm</button>
+  </section>
+
+  <!-- Main Workspace -->
+  <section id="emptyState" class="empty-state">
+    <h1>Your AI Team is Ready, Sir.</h1>
+    <p>
+      Describe your project or question below. ChatGPT and Gemini will collaborate,
+      verify each other's work silently in the background, and deliver only the final output.
+    </p>
+  </section>
+
+  <div id="chatFeed" style="display:flex;flex-direction:column;gap:14px"></div>
+</main>
+
+<div id="composerWrap" class="composer-wrap">
+  <div class="composer">
+    <textarea id="promptInput" rows="1" placeholder="Describe your project or task..." onkeydown="handleKey(event)"></textarea>
+    <button id="sendBtn" class="primary-btn" onclick="runSwarm()">Send</button>
+  </div>
+</div>
+
+<script>
+  const STORAGE_KEY = "ai_swarm_config_v1";
+  let isRunning = false;
+
+  function getConfig() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    } catch {
+      return {};
+    }
+  }
+
+  function init() {
+    const cfg = getConfig();
+    const hasKeys = Boolean(cfg.openaiKey || cfg.geminiKey);
+    document.getElementById("statusDot").className = hasKeys ? "dot" : "dot offline";
+    if (!hasKeys) {
+      toggleSetup(true);
+    }
+  }
+
+  function toggleSetup(show) {
+    const cfg = getConfig();
+    document.getElementById("openaiKey").value = cfg.openaiKey || "";
+    document.getElementById("geminiKey").value = cfg.geminiKey || "";
+    document.getElementById("qualityTier").value = cfg.qualityTier || "pro";
+    document.getElementById("setupError").textContent = "";
+    document.getElementById("setupScreen").style.display = show ? "flex" : "none";
+    document.getElementById("emptyState").style.display =
+      !show && document.getElementById("chatFeed").children.length === 0 ? "block" : "none";
+    document.getElementById("composerWrap").style.display = show ? "none" : "block";
+  }
+
+  function saveKeys() {
+    const openaiKey = document.getElementById("openaiKey").value.trim();
+    const geminiKey = document.getElementById("geminiKey").value.trim();
+    const qualityTier = document.getElementById("qualityTier").value;
+
+    if (!openaiKey && !geminiKey) {
+      document.getElementById("setupError").textContent =
+        "Please enter at least one API key (both OpenAI and Gemini recommended).";
+      return;
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ openaiKey, geminiKey, qualityTier }));
+    document.getElementById("statusDot").className = "dot";
+    toggleSetup(false);
+  }
+
+  function clearChat() {
+    if (isRunning) return;
+    document.getElementById("chatFeed").innerHTML = "";
+    toggleSetup(false);
+  }
+
+  function handleKey(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      runSwarm();
+    }
+  }
+
+  async function callOpenAI(apiKey, model, systemPrompt, userPrompt) {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        temperature: 0.25
+      })
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`OpenAI (${res.status}): ${err.slice(0, 160)}`);
+    }
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content?.trim() || "";
+  }
+
+  async function callGemini(apiKey, model, systemPrompt, userPrompt) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey
+      },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+        generationConfig: { temperature: 0.25 }
+      })
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Gemini (${res.status}): ${err.slice(0, 160)}`);
+    }
+    const data = await res.json();
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    return parts.map(p => p.text || "").join("").trim();
+  }
+
+  async function runSwarm() {
+    if (isRunning) return;
+    const input = document.getElementById("promptInput");
+    const prompt = input.value.trim();
+    if (!prompt) return;
+
+    const cfg = getConfig();
+    if (!cfg.openaiKey && !cfg.geminiKey) {
+      toggleSetup(true);
+      return;
+    }
+
+    isRunning = true;
+    input.value = "";
+    document.getElementById("sendBtn").disabled = true;
+    document.getElementById("emptyState").style.display = "none";
+
+    appendUserBubble(prompt);
+    const loader = appendLoader();
+
+    const gptModel = cfg.qualityTier === "fast" ? "gpt-4o-mini" : "gpt-4o";
+    const gemModel = cfg.qualityTier === "fast" ? "gemini-2.5-flash" : "gemini-2.5-pro";
+
+    try {
+      let finalAnswer = "";
+
+      if (cfg.openaiKey && cfg.geminiKey) {
+        // 1. Parallel independent execution (Silent)
+        const [gptDraft, gemDraft] = await Promise.all([
+          callOpenAI(
+            cfg.openaiKey,
+            gptModel,
+            "You are a senior architect and problem solver. Deliver a complete, accurate, well-structured solution.",
+            prompt
+          ),
+          callGemini(
+            cfg.geminiKey,
+            gemModel,
+            "You are a senior engineer and analytical verifier. Deliver a complete, accurate, well-structured solution.",
+            prompt
+          )
+        ]);
+
+        // 2. Silent cross-review & defect detection
+        const [gptCritique, gemCritique] = await Promise.all([
+          callOpenAI(
+            cfg.openaiKey,
+            "gpt-4o-mini",
+            "Identify any mistakes, weak assumptions, or missing details in the peer solution concisely.",
+            `Task:\n${prompt}\n\nPeer Solution:\n${gemDraft}`
+          ),
+          callGemini(
+            cfg.geminiKey,
+            "gemini-2.5-flash",
+            "Identify any mistakes, weak assumptions, or missing details in the peer solution concisely.",
+            `Task:\n${prompt}\n\nPeer Solution:\n${gptDraft}`
+          )
+        ]);
+
+        // 3. Final verified synthesis (Only this output is shown to the user)
+        finalAnswer = await callGemini(
+          cfg.geminiKey,
+          gemModel,
+          "You are the Lead Synthesizer. Combine the strongest parts of both drafts, fix every issue caught in review, and output ONLY the clean, final, ready-to-use deliverable with zero meta-commentary about AI collaboration.",
+          `USER REQUEST:\n${prompt}\n\nDRAFT A:\n${gptDraft}\n\nDRAFT B:\n${gemDraft}\n\nREVIEW NOTES:\n${gptCritique}\n${gemCritique}`
+        );
+      } else if (cfg.geminiKey) {
+        // Single-provider fallback with silent self-verification
+        const draft = await callGemini(cfg.geminiKey, gemModel, "Solve the user request thoroughly and accurately.", prompt);
+        finalAnswer = await callGemini(
+          cfg.geminiKey,
+          gemModel,
+          "Verify and refine this draft so there are zero errors or gaps. Output ONLY the final polished answer.",
+          `Request:\n${prompt}\n\nDraft:\n${draft}`
+        );
+      } else {
+        const draft = await callOpenAI(cfg.openaiKey, gptModel, "Solve the user request thoroughly and accurately.", prompt);
+        finalAnswer = await callOpenAI(
+          cfg.openaiKey,
+          gptModel,
+          "Verify and refine this draft so there are zero errors or gaps. Output ONLY the final polished answer.",
+          `Request:\n${prompt}\n\nDraft:\n${draft}`
+        );
+      }
+
+      loader.remove();
+      appendAssistantBubble(finalAnswer);
+    } catch (err) {
+      loader.remove();
+      appendAssistantBubble(`**Error:** ${err.message}\n\nPlease tap **API Keys** in the top right to verify your keys and billing quota.`);
+    } finally {
+      isRunning = false;
+      document.getElementById("sendBtn").disabled = false;
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+    }
+  }
+
+  function appendUserBubble(text) {
+    const div = document.createElement("div");
+    div.className = "bubble user";
+    div.textContent = text;
+    document.getElementById("chatFeed").appendChild(div);
+  }
+
+  function appendLoader() {
+    const div = document.createElement("div");
+    div.className = "loader";
+    div.innerHTML = `<div class="spinner"></div><span>Swarm working silently in the background...</span>`;
+    document.getElementById("chatFeed").appendChild(div);
+    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+    return div;
+  }
+
+  function appendAssistantBubble(markdownText) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "bubble assistant";
+
+    const header = document.createElement("div");
+    header.className = "bubble-header";
+    header.innerHTML = `<span>FINAL VERIFIED OUTPUT</span>`;
+
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "copy-btn";
+    copyBtn.textContent = "Copy";
+    copyBtn.onclick = () => {
+      navigator.clipboard.writeText(markdownText);
+      copyBtn.textContent = "Copied!";
+      setTimeout(() => (copyBtn.textContent = "Copy"), 1500);
+    };
+    header.appendChild(copyBtn);
+
+    const body = document.createElement("div");
+    body.className = "md";
+    body.innerHTML = renderMarkdown(markdownText);
+
+    wrapper.appendChild(header);
+    wrapper.appendChild(body);
+    document.getElementById("chatFeed").appendChild(wrapper);
+  }
+
+  function renderMarkdown(raw) {
+    let text = raw
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+    // Fenced code blocks
+    text = text.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+      return `<pre><code>${code.trim()}</code></pre>`;
+    });
+
+    // Inline code
+    text = text.replace(/`([^`]+)`/g, "<code>$1</code>");
+
+    // Headings
+    text = text.replace(/^### (.*)$/gm, "<h3>$1</h3>");
+    text = text.replace(/^## (.*)$/gm, "<h2>$1</h2>");
+    text = text.replace(/^# (.*)$/gm, "<h1>$1</h1>");
+
+    // Bold
+    text = text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+
+    // Bullet lists
+    text = text.replace(/^\s*[-*] (.*)$/gm, "<li>$1</li>");
+    text = text.replace(/(<li>.*<\/li>\n?)+/g, match => `<ul>${match}</ul>`);
+
+    // Paragraphs & line breaks
+    return text
+      .split(/\n{2,}/)
+      .map(block => (block.startsWith("<h") || block.startsWith("<pre") || block.startsWith("<ul") ? block : `<p>${block.replace(/\n/g, "<br>")}</p>`))
+      .join("");
+  }
+
+  init();
+</script>
+</body>
+  </html>
+  
