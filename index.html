@@ -74,7 +74,6 @@
       flex-direction: column;
       gap: 16px;
     }
-    /* Setup Card */
     .setup-card {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -112,7 +111,6 @@
       cursor: pointer;
     }
     .primary-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    /* Chat Stream */
     .empty-state {
       text-align: center;
       margin: auto;
@@ -161,7 +159,6 @@
       cursor: pointer;
     }
     .copy-btn:hover { color: var(--text); border-color: var(--accent); }
-    /* Markdown Output Styling */
     .md h1, .md h2, .md h3 { margin: 14px 0 6px; color: #fff; }
     .md h1 { font-size: 18px; }
     .md h2 { font-size: 16px; }
@@ -186,7 +183,6 @@
       margin: 10px 0;
     }
     .md pre code { background: none; padding: 0; color: #e2e8f0; }
-    /* Silent Processing Pulse */
     .loader {
       display: flex;
       align-items: center;
@@ -209,7 +205,6 @@
       flex-shrink: 0;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-    /* Bottom Composer */
     .composer-wrap {
       position: fixed;
       bottom: 0;
@@ -254,12 +249,11 @@
 </header>
 
 <main id="mainContainer">
-  <!-- API Key Setup Screen -->
   <section id="setupScreen" class="setup-card" style="display:none">
     <h2>Connect Your AI Team</h2>
     <p>
       Enter your API keys below to grant AI SWARM access to ChatGPT and Gemini.
-      Your keys stay privately inside your own browser storage and are never sent to any third-party server.
+      Your keys stay privately inside your own browser storage.
     </p>
     <div class="field">
       <label for="openaiKey">OpenAI API Key (ChatGPT)</label>
@@ -272,15 +266,14 @@
     <div class="field">
       <label for="qualityTier">Collaboration Power</label>
       <select id="qualityTier">
-        <option value="pro">High Precision (GPT-4o + Gemini 2.5 Pro)</option>
-        <option value="fast">Fast & Economical (GPT-4o-mini + Gemini 2.5 Flash)</option>
+        <option value="pro">High Precision (Best Available Models)</option>
+        <option value="fast">Fast &amp; Economical (Flash / Mini Models)</option>
       </select>
     </div>
     <div id="setupError" class="error-text"></div>
-    <button class="primary-btn" onclick="saveKeys()">Save & Activate AI Swarm</button>
+    <button class="primary-btn" onclick="saveKeys()">Save &amp; Activate AI Swarm</button>
   </section>
 
-  <!-- Main Workspace -->
   <section id="emptyState" class="empty-state">
     <h1>Your AI Team is Ready, Sir.</h1>
     <p>
@@ -300,8 +293,9 @@
 </div>
 
 <script>
-  const STORAGE_KEY = "ai_swarm_config_v1";
+  const STORAGE_KEY = "ai_swarm_config_v2";
   let isRunning = false;
+  let cachedGeminiModels = null;
 
   function getConfig() {
     try {
@@ -342,6 +336,7 @@
         "Please enter at least one API key (both OpenAI and Gemini recommended).";
       return;
     }
+    cachedGeminiModels = null;
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ openaiKey, geminiKey, qualityTier }));
     document.getElementById("statusDot").className = "dot";
     toggleSetup(false);
@@ -358,6 +353,41 @@
       e.preventDefault();
       runSwarm();
     }
+  }
+
+  async function resolveGeminiModels(apiKey) {
+    if (cachedGeminiModels && cachedGeminiModels.key === apiKey) {
+      return cachedGeminiModels;
+    }
+    const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models", {
+      headers: { "x-goog-api-key": apiKey }
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Gemini Key Check (${res.status}): ${err.slice(0, 160)}`);
+    }
+    const data = await res.json();
+    const usable = (data.models || [])
+      .filter(m => (m.supportedGenerationMethods || []).includes("generateContent"))
+      .map(m => (m.name || "").replace(/^models\//, ""))
+      .filter(id => /^gemini-/i.test(id) && !/embed|imagen|veo|tts|audio|live|robotics|computer-use/i.test(id));
+
+    if (!usable.length) {
+      throw new Error("No active Gemini text models found for this API key.");
+    }
+
+    const flash =
+      usable.find(m => /gemini-3.*flash/i.test(m)) ||
+      usable.find(m => /flash/i.test(m)) ||
+      usable[0];
+
+    const pro =
+      usable.find(m => /gemini-3.*pro/i.test(m)) ||
+      usable.find(m => /pro/i.test(m)) ||
+      flash;
+
+    cachedGeminiModels = { key: apiKey, pro, flash };
+    return cachedGeminiModels;
   }
 
   async function callOpenAI(apiKey, model, systemPrompt, userPrompt) {
@@ -428,13 +458,19 @@
     const loader = appendLoader();
 
     const gptModel = cfg.qualityTier === "fast" ? "gpt-4o-mini" : "gpt-4o";
-    const gemModel = cfg.qualityTier === "fast" ? "gemini-2.5-flash" : "gemini-2.5-pro";
 
     try {
       let finalAnswer = "";
+      let gemPrimary = "";
+      let gemFast = "";
+
+      if (cfg.geminiKey) {
+        const resolved = await resolveGeminiModels(cfg.geminiKey);
+        gemPrimary = cfg.qualityTier === "fast" ? resolved.flash : resolved.pro;
+        gemFast = resolved.flash;
+      }
 
       if (cfg.openaiKey && cfg.geminiKey) {
-        // 1. Parallel independent execution (Silent)
         const [gptDraft, gemDraft] = await Promise.all([
           callOpenAI(
             cfg.openaiKey,
@@ -444,13 +480,12 @@
           ),
           callGemini(
             cfg.geminiKey,
-            gemModel,
+            gemPrimary,
             "You are a senior engineer and analytical verifier. Deliver a complete, accurate, well-structured solution.",
             prompt
           )
         ]);
 
-        // 2. Silent cross-review & defect detection
         const [gptCritique, gemCritique] = await Promise.all([
           callOpenAI(
             cfg.openaiKey,
@@ -460,25 +495,23 @@
           ),
           callGemini(
             cfg.geminiKey,
-            "gemini-2.5-flash",
+            gemFast,
             "Identify any mistakes, weak assumptions, or missing details in the peer solution concisely.",
             `Task:\n${prompt}\n\nPeer Solution:\n${gptDraft}`
           )
         ]);
 
-        // 3. Final verified synthesis (Only this output is shown to the user)
         finalAnswer = await callGemini(
           cfg.geminiKey,
-          gemModel,
+          gemPrimary,
           "You are the Lead Synthesizer. Combine the strongest parts of both drafts, fix every issue caught in review, and output ONLY the clean, final, ready-to-use deliverable with zero meta-commentary about AI collaboration.",
           `USER REQUEST:\n${prompt}\n\nDRAFT A:\n${gptDraft}\n\nDRAFT B:\n${gemDraft}\n\nREVIEW NOTES:\n${gptCritique}\n${gemCritique}`
         );
       } else if (cfg.geminiKey) {
-        // Single-provider fallback with silent self-verification
-        const draft = await callGemini(cfg.geminiKey, gemModel, "Solve the user request thoroughly and accurately.", prompt);
+        const draft = await callGemini(cfg.geminiKey, gemPrimary, "Solve the user request thoroughly and accurately.", prompt);
         finalAnswer = await callGemini(
           cfg.geminiKey,
-          gemModel,
+          gemPrimary,
           "Verify and refine this draft so there are zero errors or gaps. Output ONLY the final polished answer.",
           `Request:\n${prompt}\n\nDraft:\n${draft}`
         );
@@ -553,27 +586,17 @@
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
 
-    // Fenced code blocks
     text = text.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
       return `<pre><code>${code.trim()}</code></pre>`;
     });
-
-    // Inline code
     text = text.replace(/`([^`]+)`/g, "<code>$1</code>");
-
-    // Headings
     text = text.replace(/^### (.*)$/gm, "<h3>$1</h3>");
     text = text.replace(/^## (.*)$/gm, "<h2>$1</h2>");
     text = text.replace(/^# (.*)$/gm, "<h1>$1</h1>");
-
-    // Bold
     text = text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-
-    // Bullet lists
     text = text.replace(/^\s*[-*] (.*)$/gm, "<li>$1</li>");
     text = text.replace(/(<li>.*<\/li>\n?)+/g, match => `<ul>${match}</ul>`);
 
-    // Paragraphs & line breaks
     return text
       .split(/\n{2,}/)
       .map(block => (block.startsWith("<h") || block.startsWith("<pre") || block.startsWith("<ul") ? block : `<p>${block.replace(/\n/g, "<br>")}</p>`))
@@ -583,5 +606,4 @@
   init();
 </script>
 </body>
-  </html>
-  
+</html>
